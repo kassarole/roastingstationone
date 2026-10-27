@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  docker:
+    runs-on: linux-amd64
+    env:
+      IMAGE: git.girlfailu.re/kass/ps1-roastlab:latest
+      STORAGE_DRIVER: vfs
+      BUILDAH_ISOLATION: chroot
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install buildah
+        run: apt-get update && apt-get install -y buildah
+
+      - name: Build
+        run: buildah build --format docker -t "$IMAGE" .
+
+      - name: Login and push
+        env:
+          REG_USER: ${{ secrets.DOCKER_USERNAME }}
+          REG_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+        run: |
+          echo "$REG_TOKEN" | buildah login --username "$REG_USER" --password-stdin git.girlfailu.re
+          buildah push "$IMAGE"

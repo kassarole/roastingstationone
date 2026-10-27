@@ -1,0 +1,131 @@
+{% extends "roasts/base.html" %}
+{% block title %}Roasts - Roasting Station: One{% endblock %}
+{% block content %}
+<style>
+  .clickable-row { cursor: pointer; }
+  .clickable-row:hover td { background-color: #f0f9ff !important; }
+</style>
+
+<h1>Roasts <small>({{ total }})</small></h1>
+
+<form method="get" class="filters">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search beans, origin, operator...">
+  <select name="origin">
+    <option value="">All origins</option>
+    {% for o in origins %}
+      <option value="{{ o }}" {% if o == selected_origin %}selected{% endif %}>{{ o }}</option>
+    {% endfor %}
+  </select>
+  <select name="level">
+    <option value="">All roast levels</option>
+    <option value="light" {% if selected_level == "light" %}selected{% endif %}>Light</option>
+    <option value="medium_light" {% if selected_level == "medium_light" %}selected{% endif %}>Medium-Light</option>
+    <option value="medium" {% if selected_level == "medium" %}selected{% endif %}>Medium</option>
+    <option value="medium_dark" {% if selected_level == "medium_dark" %}selected{% endif %}>Medium-Dark</option>
+    <option value="dark" {% if selected_level == "dark" %}selected{% endif %}>Dark</option>
+  </select>
+  <input type="number" step="1" name="w_min" value="{{ w_min }}" placeholder="Min weight (g)">
+  <input type="number" step="1" name="w_max" value="{{ w_max }}" placeholder="Max weight (g)">
+  <input type="number" step="0.1" name="ror_min" value="{{ ror_min }}" placeholder="Min total RoR">
+  <input type="date" name="from" value="{{ date_from }}">
+  <input type="date" name="to" value="{{ date_to }}">
+  
+  <select name="sort">
+    <option value="-roast_date" {% if current_sort == "-roast_date" %}selected{% endif %}>Newest First</option>
+    <option value="reviews_high" {% if current_sort == "reviews_high" %}selected{% endif %}>Highest Reviewed</option>
+    <option value="reviews_low" {% if current_sort == "reviews_low" %}selected{% endif %}>Lowest Reviewed</option>
+    <option value="reviews_most" {% if current_sort == "reviews_most" %}selected{% endif %}>Most Reviews</option>
+  </select>
+
+  <button type="submit">Filter</button>
+  {% if user.is_authenticated %}<a href="{% url 'roast_upload' %}" class="btn">Upload</a>{% endif %}
+</form>
+
+<table class="grid">
+  <thead>
+    <tr>
+      <th><input type="checkbox" id="select-all"></th>
+      <th>Date</th><th>Beans</th><th>Origin</th><th>Level</th>
+      <th>Operator</th><th>In (g)</th><th>Loss %</th>
+      <th>
+        <a href="?{% if request.GET.q %}q={{ request.GET.q }}&{% endif %}sort={% if current_sort == 'reviews_high' %}reviews_low{% else %}reviews_high{% endif %}" style="color: inherit; text-decoration: none;">
+          Reviews
+          {% if current_sort == 'reviews_high' %}▼{% elif current_sort == 'reviews_low' %}▲{% endif %}
+        </a>
+      </th>
+      <th>Owner</th><th>Public</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in page %}
+    <tr class="clickable-row" data-href="{{ r.get_absolute_url }}">
+      <td><input type="checkbox" class="compare-cb" value="{{ r.uuid }}"></td>
+      <td>{{ r.roast_date|default:"-" }} {{ r.roast_time|time:"H:i" }}</td>
+      <td><a href="{{ r.get_absolute_url }}">{{ r.beans|default:"(untitled)" }}</a></td>
+      <td>{{ r.origin|default:"-" }}</td>
+      <td>{{ r.get_roast_level_display|default:"-" }}</td>
+      <td>{{ r.operator|default:"-" }}</td>
+      <td>{{ r.weight_in_g|floatformat:1|default:"-" }}</td>
+      <td>{{ r.weight_loss_pct|floatformat:1|default:"-" }}</td>
+      <td>
+        {% if r.total_reviews > 0 %}
+          <strong class="{% if r.recommend_pct >= 50 %}text-positive{% else %}text-negative{% endif %}">
+            {{ r.recommend_pct|floatformat:0 }}%
+          </strong>
+          <small>({{ r.total_reviews }})</small>
+        {% else %}
+          <span class="muted">-</span>
+        {% endif %}
+      </td>
+      <td>{{ r.owner.username|default:"unowned" }}</td>
+      <td>{% if r.is_public %}yes{% else %}no{% endif %}</td>
+      <td>
+        {% if r.can_claim %}
+          <form method="post" action="{% url 'roast_claim' r.uuid %}" style="display:inline" onsubmit="event.stopPropagation();">
+            {% csrf_token %}
+            <button type="submit" class="link-btn" style="color: var(--ps1-cyan); font-weight: bold;">Claim</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="12" class="empty">No roasts match. {% if user.is_authenticated %}<a href="{% url 'roast_upload' %}">Upload one.</a>{% endif %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="pagination">
+  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">prev</a>{% endif %}
+  <span>Page {{ page.number }} / {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a href="?page={{ page.next_page_number }}">next</a>{% endif %}
+</div>
+
+<form id="compare-form" method="get" action="{% url 'roast_compare' %}">
+  <button type="submit" class="btn">Compare selected</button>
+</form>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const rows = document.querySelectorAll(".clickable-row");
+    rows.forEach(row => {
+      row.addEventListener("click", (e) => {
+        if (e.target.closest("input") || e.target.closest("button") || e.target.closest("a") || e.target.closest("form")) {
+          return;
+        }
+        window.location.href = row.dataset.href;
+      });
+    });
+  });
+
+  document.getElementById('select-all').addEventListener('change', e => {
+    document.querySelectorAll('.compare-cb').forEach(cb => cb.checked = e.target.checked);
+  });
+  
+  document.getElementById('compare-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const uuids = [...document.querySelectorAll('.compare-cb:checked')].map(cb => cb.value);
+    if (!uuids.length) return alert('Select at least one roast');
+    window.location = "{% url 'roast_compare' %}?" + uuids.map(u => 'u=' + u).join('&');
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "roasts/base.html" %}
+{% load static %}
+{% block title %}Compare - Roasting Station: One{% endblock %}
+{% block content %}
+<h1>Compare roasts</h1>
+
+{% if roasts %}
+  <div id="compare-chart"></div>
+{% else %}
+  <p class="empty">No roasts selected. Please go back and select roasts to compare.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if roasts %}
+<script>window.__COMPARE__ = {{ payloads_json|safe }};</script>
+<script src="{% static 'roasts/js/compare.js' %}"></script>
+{% endif %}
+{% endblock %}

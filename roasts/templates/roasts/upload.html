@@ -1,0 +1,14 @@
+{% extends "roasts/base.html" %}
+{% block title %}Upload -  Roasting Station: One{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <h1>Upload .alog files</h1>
+  <p>Uploads are private by default. You can mark them public later.</p>
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Import</button>
+  </form>
+  <p class="hint">Files with an existing roastUUID are skipped (idempotent).</p>
+</div>
+{% endblock %}

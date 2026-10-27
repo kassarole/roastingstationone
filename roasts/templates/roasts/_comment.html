@@ -1,0 +1,26 @@
+<div class="comment-thread" id="comment-{{ comment.id }}">
+  <div class="comment-main">
+    <div class="avatar">
+      {{ comment.author.username|slice:":1"|upper }}
+    </div>
+    <div class="comment-content">
+      <div class="comment-header">
+        <strong>{{ comment.author.username }}</strong>
+        
+        {% if comment.recommends == True %}
+          <span class="review-badge positive">Recommended</span>
+        {% elif comment.recommends == False %}
+          <span class="review-badge negative">Not Recommended</span>
+        {% endif %}
+        
+        <span class="when" title="{{ comment.created_at|date:'Y-m-d H:i' }}">
+          {{ comment.created_at|timesince }} ago
+        </span>
+        {% if comment.author == user or user.is_staff %}
+          <button class="del-btn" data-url="{% url 'roast_comment_delete' comment.roast.uuid comment.id %}" title="Delete">×</button>
+        {% endif %}
+      </div>
+      <p class="comment-body">{{ comment.body|linebreaksbr }}</p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,166 @@
+{% extends "roasts/base.html" %}
+{% load roast_extras %}
+{% load static %}
+{% block title %}{{ roast.beans }} - Roasting Station: One{% endblock %}
+{% block content %}
+<div class="detail-header">
+  <div>
+    <h1>{{ roast.beans|default:"(untitled roast)" }}</h1>
+    <p class="meta">
+      {% if roast.bean_info %}
+      <div class="bean-info-card" style="background: #f0f9ff; padding: 12px; border-radius: 6px; margin-bottom: 16px; border: 1px solid var(--ps1-cyan);">
+        <h3 style="margin-top: 0; color: var(--ps1-cyan);">Bean Library Match</h3>
+        <p style="margin: 4px 0;"><strong>Name:</strong> {{ roast.bean_info.name }}</p>
+        <p style="margin: 4px 0;"><strong>Process:</strong> {{ roast.bean_info.process|default:"-" }} | <strong>Cultivar:</strong> {{ roast.bean_info.cultivar|default:"-" }}</p>
+        <p style="margin: 4px 0;"><strong>Recommended Roast:</strong> {{ roast.bean_info.roast_recommendation|default:"-" }}</p>
+        {% if roast.bean_info.flavor_keywords %}
+        <p style="margin: 4px 0;"><strong>Flavors:</strong> {{ roast.bean_info.flavor_keywords }}</p>
+        {% endif %}
+        {% if roast.bean_info.sweetmarias_url %}
+        <p style="margin: 8px 0 0;"><a href="{{ roast.bean_info.sweetmarias_url }}" target="_blank" style="color: var(--ps1-red); font-weight: bold;">View on Sweet Maria's &rarr;</a></p>
+        {% endif %}
+      </div>
+      {% endif %}
+      {{ roast.roast_date|default:"-" }} {{ roast.roast_time|time:"H:i" }}
+      | Batch #{{ roast.batch_nr|default:"-" }}
+      | {{ roast.operator|default:"" }}
+      | {{ roast.roaster_type|default:"" }}
+      | Origin: {{ roast.origin|default:"-" }}
+      | Level: {{ roast.get_roast_level_display|default:"-" }}
+      | Owner: {{ roast.owner.username|default:"unowned" }}
+      | {% if roast.is_public %}Public{% else %}Private{% endif %}
+    </p>
+  </div>
+  <div class="score">
+    {% if roast.rating %}<span class="stars">{% for i in "12345"|slice:roast.rating %}*{% endfor %}</span>{% endif %}
+  </div>
+</div>
+
+<section class="stats-row">
+  <div><label>In</label><span>{{ roast.weight_in_g|floatformat:1|default:"-" }} g</span></div>
+  <div><label>Out (est.)</label><span>{{ roast.weight_out_g|floatformat:1|default:"-" }} g</span></div>
+  <div><label>Loss</label><span>{{ roast.weight_loss_pct|floatformat:1|default:"-" }} %</span></div>
+  <div><label>Total</label><span>{{ roast.duration_s|fmt_time }}</span></div>
+  <div><label>Ambient</label><span>{{ roast.ambient_temp|floatformat:1|default:"-" }}</span></div>
+</section>
+
+<div id="chart"></div>
+
+<section class="grid-2">
+  <div>
+    <h3>Events</h3>
+    <table class="events">
+      <thead><tr><th>Type</th><th>Time</th><th>BT</th><th>ET</th></tr></thead>
+      <tbody>
+      {% for e in roast.events.all %}
+        <tr>
+          <td>{{ e.get_event_type_display }}</td>
+          <td>{{ e.time_s|fmt_time }}</td>
+          <td>{{ e.bt|to_f:roast.raw.mode|floatformat:1|default:"-" }}</td>
+          <td>{{ e.et|to_f:roast.raw.mode|floatformat:1|default:"-" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="empty">No events recorded.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+
+    {% if roast.computed %}
+    <h3>Phase metrics</h3>
+    <table class="events">
+      <tbody>
+        <tr><td>Dry phase</td><td>{{ roast.computed.dryphasetime|default:"-" }} s</td><td>RoR {{ roast.computed.dry_phase_ror|floatformat:1|default:"-" }}</td></tr>
+        <tr><td>Mid phase</td><td>{{ roast.computed.midphasetime|default:"-" }} s</td><td>RoR {{ roast.computed.mid_phase_ror|floatformat:1|default:"-" }}</td></tr>
+        <tr><td>Finish phase</td><td>{{ roast.computed.finishphasetime|default:"-" }} s</td><td>RoR {{ roast.computed.finish_phase_ror|floatformat:1|default:"-" }}</td></tr>
+        <tr><td>Total RoR</td><td colspan="2">{{ roast.computed.total_ror|floatformat:1|default:"-" }}</td></tr>
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if can_claim %}
+    <form method="post" action="{% url 'roast_claim' roast.uuid %}" class="claim-form">
+      {% csrf_token %}
+      <button type="submit" class="btn-claim">Claim ownership of this roast</button>
+    </form>
+    {% endif %}
+
+    {% if can_delete %}
+    <form method="post" action="{% url 'roast_delete' roast.uuid %}"
+          onsubmit="return confirm('Delete this roast permanently?');" class="danger-form">
+      {% csrf_token %}
+      <button type="submit" class="btn-danger">Delete this roast</button>
+    </form>
+    {% endif %}
+    
+    <div style="margin-top: 16px;">
+        <a href="{% url 'roast_download' roast.uuid %}" class="btn" style="display: inline-block;">Download for Profile</a>
+    </div>
+  </div>
+
+  <div>
+    {% if total_reviews > 0 %}
+    <div class="review-summary">
+      <div class="review-score {% if recommend_pct >= 50 %}positive{% else %}negative{% endif %}">
+        {{ recommend_pct }}%
+      </div>
+      <div class="review-text">
+        <strong>{{ positive_reviews }} out of {{ total_reviews }}</strong> roasters recommend this coffee.
+      </div>
+    </div>
+    {% endif %}
+
+    <h3>Discussion <span id="comment-count" class="badge">{{ roast.comments.count }}</span></h3>
+    
+    {% if user.is_authenticated %}
+    <div class="comment-composer">
+      <div class="avatar">{{ user.username|slice:":1"|upper }}</div>
+      <form id="comment-form" data-url="{% url 'roast_comment' roast.uuid %}">
+        {% csrf_token %}
+        
+        <div class="review-toggle">
+          <label>
+            <input type="radio" name="recommends" value="1" required>
+            <span class="toggle-btn positive">👍 I recommend this</span>
+          </label>
+          <label>
+            <input type="radio" name="recommends" value="0" required>
+            <span class="toggle-btn negative">👎 I don't recommend this</span>
+          </label>
+        </div>
+
+        <textarea name="body" placeholder="Write your review. Why do you recommend it (or not)?" required></textarea>
+        <div class="composer-footer">
+          <button type="submit" class="btn">Post Review</button>
+        </div>
+      </form>
+    </div>
+    {% else %}
+      <div class="card" style="text-align:center; padding: 20px; margin-bottom: 20px;">
+        <p>Join the discussion. <a href="{% url 'login' %}?next={{ request.path }}">Sign in</a> to add notes and reviews.</p>
+      </div>
+    {% endif %}
+
+    <div id="comment-feed" class="comment-feed">
+      {% for c in comments %}
+        {% include "roasts/_comment.html" with comment=c %}
+      {% empty %}
+        <p class="empty" id="no-comments">No reviews yet. Be the first to share your thoughts!</p>
+      {% endfor %}
+    </div>
+
+    {% if can_edit %}
+    <h3>Roast metadata</h3>
+    <form method="post" action="{% url 'roast_update_meta' roast.uuid %}">
+      {% csrf_token %}
+      {{ meta_form.as_p }}
+      <button type="submit">Save</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>window.__ROAST__ = {{ chart_payload_json|safe }};</script>
+<script src="{% static 'roasts/js/chart.js' %}"></script>
+{% endblock %}
