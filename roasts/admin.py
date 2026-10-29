@@ -34,7 +34,7 @@ class RoastAdmin(admin.ModelAdmin):
         "uuid", "alog_uuid", "uploaded_at", "raw",
         "timex", "temp_bt", "temp_et", "computed",
     )
-    inlines = [EventInline, CommentInline]
+    inlines = (EventInline, CommentInline)
 
 
 @admin.register(RoastComment)
