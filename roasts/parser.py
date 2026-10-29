@@ -58,7 +58,7 @@ def _events_from_data(data, mode):
     def convert_temp(t):
         return _to_celsius([t], mode)[0] if t is not None else None
 
-    if "anno_positions" in data and data["anno_positions"]:
+    if data.get("anno_positions"):
         for anno in data["anno_positions"]:
             if not anno or len(anno) < 2:
                 continue
