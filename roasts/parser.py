@@ -1,6 +1,6 @@
 import ast
 import json
-from datetime import datetime
+from datetime import date, time
 from .models import Roast, RoastEvent, BeanInfo
 
 
@@ -104,14 +104,14 @@ def parse_alog(file_obj, user=None) -> Roast:
     roast_date = None
     if data.get("roastisodate"):
         try:
-            roast_date = datetime.strptime(data["roastisodate"], "%Y-%m-%d").date()
+            roast_date = date.fromisoformat(data["roastisodate"])
         except ValueError:
             pass
 
     roast_time = None
     if data.get("roasttime"):
         try:
-            roast_time = datetime.strptime(data["roasttime"], "%H:%M:%S").time()
+            roast_time = time.fromisoformat(data["roasttime"])
         except ValueError:
             pass
 
