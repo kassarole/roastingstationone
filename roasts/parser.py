@@ -19,7 +19,7 @@ def _load_payload(file_obj):
     except (ValueError, SyntaxError) as e:
         raise ValueError(f"Invalid .alog format: {e}")
     if not isinstance(obj, dict):
-        raise ValueError("Parsed content is not a dict")
+        raise TypeError("Parsed content is not a dict")
     return obj
 
 
