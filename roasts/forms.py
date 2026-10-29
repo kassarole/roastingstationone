@@ -42,11 +42,11 @@ class NoteForm(forms.Form):
 class RoastMetaForm(forms.ModelForm):
     class Meta:
         model = Roast
-        fields = [
+        fields = (
             "title", "beans", "origin", "roast_level",
             "operator", "organization",
             "notes", "rating", "is_public",
-        ]
+        )
         widgets = {
             "notes": forms.Textarea(attrs={"rows": 5}),
             "rating": forms.NumberInput(attrs={"min": 1, "max": 5}),

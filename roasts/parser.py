@@ -1,6 +1,6 @@
 import ast
 import json
-from datetime import datetime
+from datetime import date, time
 from .models import Roast, RoastEvent, BeanInfo
 
 
@@ -19,7 +19,7 @@ def _load_payload(file_obj):
     except (ValueError, SyntaxError) as e:
         raise ValueError(f"Invalid .alog format: {e}")
     if not isinstance(obj, dict):
-        raise ValueError("Parsed content is not a dict")
+        raise TypeError("Parsed content is not a dict")
     return obj
 
 
@@ -58,7 +58,7 @@ def _events_from_data(data, mode):
     def convert_temp(t):
         return _to_celsius([t], mode)[0] if t is not None else None
 
-    if "anno_positions" in data and data["anno_positions"]:
+    if data.get("anno_positions"):
         for anno in data["anno_positions"]:
             if not anno or len(anno) < 2:
                 continue
@@ -104,14 +104,14 @@ def parse_alog(file_obj, user=None) -> Roast:
     roast_date = None
     if data.get("roastisodate"):
         try:
-            roast_date = datetime.strptime(data["roastisodate"], "%Y-%m-%d").date()
+            roast_date = date.fromisoformat(data["roastisodate"])
         except ValueError:
             pass
 
     roast_time = None
     if data.get("roasttime"):
         try:
-            roast_time = datetime.strptime(data["roasttime"], "%H:%M:%S").time()
+            roast_time = time.fromisoformat(data["roasttime"])
         except ValueError:
             pass
 

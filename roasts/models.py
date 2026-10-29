@@ -4,13 +4,13 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 
 
-ROAST_LEVEL_CHOICES = [
+ROAST_LEVEL_CHOICES = (
     ("light", "Light"),
     ("medium_light", "Medium-Light"),
     ("medium", "Medium"),
     ("medium_dark", "Medium-Dark"),
     ("dark", "Dark"),
-]
+)
 
 
 class BeanInfo(models.Model):
@@ -27,7 +27,7 @@ class BeanInfo(models.Model):
 
     class Meta:
         verbose_name_plural = "Bean Info"
-        ordering = ["name"]
+        ordering = ("name",)
 
     def __str__(self):
         return f"{self.name} ({self.origin})"
@@ -86,11 +86,11 @@ class Roast(models.Model):
     )
 
     class Meta:
-        ordering = ["-roast_date", "-roast_time"]
-        indexes = [
+        ordering = ("-roast_date", "-roast_time")
+        indexes = (
             models.Index(fields=["beans", "roast_date"]),
             models.Index(fields=["origin", "roast_level"]),
-        ]
+        )
 
     def __str__(self):
         return f"{self.beans or 'Roast'} - {self.roast_date}"
@@ -125,7 +125,7 @@ class Roast(models.Model):
 
 
 class RoastEvent(models.Model):
-    EVENT_CHOICES = [
+    EVENT_CHOICES = (
         ("CHARGE", "Charge"),
         ("TP", "Turning Point"),
         ("DRY", "Dry End"),
@@ -135,7 +135,7 @@ class RoastEvent(models.Model):
         ("DROP", "Drop"),
         ("COOL", "Cool"),
         ("NOTE", "Note"),
-    ]
+    )
     roast = models.ForeignKey(Roast, related_name="events", on_delete=models.CASCADE)
     event_type = models.CharField(max_length=16, choices=EVENT_CHOICES)
     time_s = models.FloatField()
@@ -144,17 +144,17 @@ class RoastEvent(models.Model):
     label = models.CharField(max_length=255, blank=True)
 
     class Meta:
-        ordering = ["time_s"]
+        ordering = ("time_s",)
 
     def __str__(self):
         return f"{self.event_type} @ {self.time_s:.1f}s"
 
 
 class RoastComment(models.Model):
-    RECOMMEND_CHOICES = [
+    RECOMMEND_CHOICES = (
         (True, "Recommend"),
         (False, "Do not recommend"),
-    ]
+    )
     
     roast = models.ForeignKey(Roast, related_name="comments", on_delete=models.CASCADE)
     author = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -167,7 +167,7 @@ class RoastComment(models.Model):
     recommends = models.BooleanField(null=True, blank=True, choices=RECOMMEND_CHOICES)
 
     class Meta:
-        ordering = ["created_at"]
+        ordering = ("created_at",)
 
     def __str__(self):
         return f"{self.author.username}: {self.body[:40]}"
