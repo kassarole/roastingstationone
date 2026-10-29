@@ -9,7 +9,7 @@ jobs:
   docker:
     runs-on: linux-amd64
     env:
-      IMAGE: git.girlfailu.re/kass/ps1-roastlab:latest
+      IMAGE: git.girlfailu.re/kass/roastingstationone:latest
       STORAGE_DRIVER: vfs
       BUILDAH_ISOLATION: chroot
     steps:
