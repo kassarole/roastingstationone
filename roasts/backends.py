@@ -6,7 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 class CustomOIDCBackend(OIDCAuthenticationBackend):
     # Authentik group name -> Django group name mapping.
     GROUP_MAP = {
-        "roast-masters": "Coffee Roaster",
+        "Coffee Roaster": "Coffee Roaster",
         "roast-viewers": "Viewers",
     }
 
@@ -21,6 +21,20 @@ class CustomOIDCBackend(OIDCAuthenticationBackend):
 
     def update_user(self, user, claims):
         user = super().update_user(user, claims)
+
+        # Sync username on every login, not just at creation.
+        # super().update_user() only updates email/first/last name via
+        # _get_email / _get_first_name / _get_last_name; username is not
+        # touched, so we do it explicitly here.
+        desired_username = self._get_username(claims)
+        if desired_username and user.username != desired_username:
+            # Don't clobber another account that already owns this username.
+            if not self.UserModel.objects.exclude(pk=user.pk).filter(
+                username=desired_username
+            ).exists():
+                user.username = desired_username
+                user.save(update_fields=["username"])
+
         self.update_groups(user, claims)
         return user
 
@@ -38,6 +52,7 @@ class CustomOIDCBackend(OIDCAuthenticationBackend):
         return self.UserModel.objects.none()
 
     def _get_username(self, claims):
+        """Username to assign in Django, taken from Authentik."""
         return (
             claims.get("preferred_username")
             or claims.get("username")
@@ -46,6 +61,7 @@ class CustomOIDCBackend(OIDCAuthenticationBackend):
         )
 
     def _get_email(self, claims):
+        """Email to assign in Django, taken from Authentik."""
         return claims.get("email", "")
 
     def _get_first_name(self, claims):
