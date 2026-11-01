@@ -5,20 +5,20 @@
   const palette = ['#d62728', '#1f77b4', '#2ca02c', '#ff7f0e', '#9467bd', '#8c564b'];
   const traces = [];
 
+  // Stored roast temps are Celsius (same assumption as chart.js).
+  const toF = (val) => (val !== null && val !== undefined) ? (val * 9.0 / 5.0 + 32) : val;
+  const toFArray = (arr) => (arr || []).map(toF);
+
   payloads.forEach((p, i) => {
     const color = palette[i % palette.length];
     const groupName = p.label;
-    
-    const isC = p.mode === 'C';
-    const toF = (val) => (isC && val !== null) ? (val * 9.0 / 5.0 + 32) : val;
-    const toFArray = (arr) => arr.map(toF);
 
-    const btF = toFArray(p.bt || []); 
-    const etF = toFArray(p.et || []);
+    const btF = toFArray(p.bt);
+    const etF = toFArray(p.et);
 
     const chargeEvent = (p.events || []).find(e => e.type === 'CHARGE');
     const chargeOffset = chargeEvent ? chargeEvent.time : 0;
-    const shiftedTimex = p.timex.map(t => t - chargeOffset);
+    const shiftedTimex = (p.timex || []).map(t => t - chargeOffset);
 
     // BT Line (Solid)
     traces.push({
@@ -28,7 +28,7 @@
       hovertemplate: '%{y:.1f}°F',
     });
 
-    // ET Line (Dashed)
+    // ET Line (Dotted)
     traces.push({
       x: shiftedTimex, y: etF, name: groupName + ' (ET)',
       line: { color, width: 1, dash: 'dot' }, yaxis: 'y',
