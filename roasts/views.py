@@ -15,14 +15,37 @@ from .parser import parse_alog
 from .forms import UploadForm, NoteForm, RoastMetaForm
 
 
+# --- Session key for cross-page roast selection ---
+SELECTION_SESSION_KEY = "compare_selected_uuids"
+MAX_COMPARE = 6
+
+
+def _get_selected_uuids(request):
+    """Return the list of selected roast UUIDs stored in the session."""
+    return list(request.session.get(SELECTION_SESSION_KEY, []))
+
+
+def _save_selected_uuids(request, uuids):
+    """Persist selected UUIDs (as strings, deduped, ordered) to session."""
+    seen = set()
+    cleaned = []
+    for u in uuids:
+        u = str(u)
+        if u not in seen:
+            seen.add(u)
+            cleaned.append(u)
+    request.session[SELECTION_SESSION_KEY] = cleaned[:MAX_COMPARE]
+    request.session.modified = True
+
+
 def _visible_roasts(user):
     """Queryset filtered by the caller's view permissions."""
     qs = Roast.objects.all()
-    
+
     # Anonymous users only see public roasts
     if not user.is_authenticated:
         return qs.filter(is_public=True)
-        
+
     # Any logged-in user (staff or regular) sees everything
     return qs
 
@@ -95,7 +118,7 @@ def roast_list(request):
 
     # --- Sorting ---
     sort_by = request.GET.get("sort", "-roast_date")
-    
+
     if sort_by == "reviews_high":
         qs = qs.order_by("-recommend_pct", "-total_reviews")
     elif sort_by == "reviews_low":
@@ -115,6 +138,9 @@ def roast_list(request):
         .order_by("origin")
     )
 
+    # --- Session-backed selection (persists across pages) ---
+    selected_uuids = _get_selected_uuids(request)
+
     return render(request, "roasts/list.html", {
         "page": page,
         "origins": origins,
@@ -128,7 +154,47 @@ def roast_list(request):
         "ror_min": ror_min or "",
         "total": qs.count(),
         "current_sort": sort_by,
+        # NEW: for cross-page checkbox state
+        "selected_uuids": selected_uuids,
+        "selected_count": len(selected_uuids),
+        "max_compare": MAX_COMPARE,
     })
+
+
+@require_POST
+def toggle_selection(request, uuid):
+    """Toggle a single roast UUID in the session-backed compare selection."""
+    roast = get_object_or_404(Roast, uuid=uuid)
+    if not roast.can_view(request.user):
+        return JsonResponse({"error": "Not permitted"}, status=403)
+
+    selected = _get_selected_uuids(request)
+    uid = str(roast.uuid)
+
+    if uid in selected:
+        selected.remove(uid)
+        is_selected = False
+    else:
+        if len(selected) >= MAX_COMPARE:
+            return JsonResponse(
+                {"error": f"You can compare at most {MAX_COMPARE} roasts.",
+                 "selected": False,
+                 "count": len(selected)},
+                status=400,
+            )
+        selected.append(uid)
+        is_selected = True
+
+    _save_selected_uuids(request, selected)
+    return JsonResponse({"selected": is_selected, "count": len(selected)})
+
+
+@require_POST
+def clear_selection(request):
+    """Clear all compare selections."""
+    request.session[SELECTION_SESSION_KEY] = []
+    request.session.modified = True
+    return JsonResponse({"count": 0})
 
 
 @login_required
@@ -173,7 +239,7 @@ def roast_detail(request, uuid):
     }
 
     comments = roast.comments.select_related("author").filter(parent=None)
-    
+
     # Review summary calculation
     reviews = roast.comments.exclude(recommends__isnull=True)
     total_reviews = reviews.count()
@@ -192,6 +258,8 @@ def roast_detail(request, uuid):
         "can_edit": roast.can_edit(request.user),
         "can_delete": roast.can_delete(request.user),
         "can_claim": roast.can_claim(request.user),
+        # NEW: is this roast currently selected for compare?
+        "in_compare": str(roast.uuid) in _get_selected_uuids(request),
     })
 
 
@@ -243,7 +311,7 @@ def add_comment(request, uuid):
     body = request.POST.get("body", "").strip()
     if not body:
         return JsonResponse({"error": "Empty comment"}, status=400)
-        
+
     recommends_raw = request.POST.get("recommends")
     recommends = None
     if recommends_raw == "1":
@@ -252,14 +320,14 @@ def add_comment(request, uuid):
         recommends = False
 
     c = RoastComment.objects.create(
-        roast=roast, 
-        author=request.user, 
-        body=body, 
+        roast=roast,
+        author=request.user,
+        body=body,
         recommends=recommends
     )
-    
+
     html = render_to_string("roasts/_comment.html", {"comment": c, "user": request.user})
-    
+
     return JsonResponse({
         "id": c.id,
         "html": html,
@@ -280,17 +348,23 @@ def delete_comment(request, uuid, pk):
 
 @login_required
 def compare(request):
+    """Compare view: uses GET ?u=... if provided (shareable links),
+    otherwise falls back to the session-backed selection."""
     uuids = request.GET.getlist("u")
-    
+
     if not uuids:
-        # If someone types the URL directly without selected roasts, send them back
+        # Fall back to session selection for cross-page comparisons
+        uuids = _get_selected_uuids(request)
+
+    if not uuids:
+        # Nothing to compare; send them back
         return redirect("roast_list")
 
     qs = _visible_roasts(request.user).filter(uuid__in=uuids)
-    
+
     # Preserve the order of selection
     roast_dict = {str(r.uuid): r for r in qs}
-    roasts = [roast_dict[u] for u in uuids if u in roast_dict][:6]
+    roasts = [roast_dict[u] for u in uuids if u in roast_dict][:MAX_COMPARE]
 
     payloads = []
     for r in roasts:
@@ -315,7 +389,7 @@ def compare(request):
 @login_required
 def stats(request):
     qs = _visible_roasts(request.user)
-    
+
     # Top beans
     top_beans = (
         qs.exclude(beans="")
@@ -323,16 +397,16 @@ def stats(request):
         .annotate(n=Count("id"))
         .order_by("-n")[:10]
     )
-    
+
     # Top owners (group by owner username)
     top_owners = (
         qs.values("owner__username")
         .annotate(n=Count("id"))
         .order_by("-n")[:10]
     )
-    
+
     avg_rating = qs.aggregate(avg=Avg("rating"))["avg"]
-    
+
     return render(request, "roasts/stats.html", {
         "top_beans": top_beans,
         "top_owners": top_owners,
@@ -340,29 +414,30 @@ def stats(request):
         "total_roasts": qs.count(),
     })
 
+
 @login_required
 def download_alog(request, uuid):
     roast = get_object_or_404(Roast, uuid=uuid)
     if not roast.can_view(request.user):
         return HttpResponseBadRequest("Not permitted")
-    
+
     # Make a copy so we don't accidentally save these changes to the database
     raw_data = dict(roast.raw)
-    
+
     # Update the raw data with any edits made in the web app
     raw_data['title'] = roast.title
     raw_data['beans'] = roast.beans
     raw_data['roastertype'] = roast.roaster_type
     raw_data['operator'] = roast.operator
     raw_data['organization'] = roast.organization
-    
+
     # Format it exactly like an Artisan .alog file (Python dict literal)
     alog_content = pprint.pformat(raw_data, indent=1, width=120)
-    
+
     response = HttpResponse(alog_content, content_type="text/plain")
-    
+
     filename = roast.beans or roast.title or "roast"
     filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', filename)
-    
+
     response['Content-Disposition'] = f'attachment; filename="{filename}.alog"'
     return response
