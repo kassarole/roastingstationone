@@ -99,8 +99,23 @@ class Roast(models.Model):
         return reverse("roast_detail", kwargs={"uuid": self.uuid})
 
     @property
+    def event_map(self):
+       return {e.event_type: e for e in self.events.all()}
+
+    @property
     def duration_s(self):
-        return self.timex[-1] if self.timex else 0
+        """
+        Roast duration is DROP - CHARGE as long as both exist,
+        otherwise it is the full length of the recorded data set.
+        """
+        events = self.event_map
+        charge = events.get("CHARGE")
+        drop = events.get("DROP")
+
+        if charge is not None and drop is not None and drop.time_s >= charge.time_s:
+            return drop.time_s - charge.time_s
+        else:
+            return self.timex[-1] if self.timex else 0
 
     # --- permission helpers ---
     def can_view(self, user):

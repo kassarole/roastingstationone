@@ -40,7 +40,7 @@
   <div><label>In</label><span>{{ roast.weight_in_g|floatformat:1|default:"-" }} g</span></div>
   <div><label>Out (est.)</label><span>{{ roast.weight_out_g|floatformat:1|default:"-" }} g</span></div>
   <div><label>Loss</label><span>{{ roast.weight_loss_pct|floatformat:1|default:"-" }} %</span></div>
-  <div><label>Total</label><span>{{ roast.duration_s|fmt_time }}</span></div>
+  <div><label>Duration</label><span>{{ roast.duration_s|fmt_time }}</span></div>
   <div><label>Ambient</label><span>{{ roast.ambient_temp|floatformat:1|default:"-" }}</span></div>
 </section>
 
