@@ -65,12 +65,14 @@ def _events_from_data(data, mode):
             code = anno[0]
             if code in type_map:
                 evt_type = type_map[code]
-                # Grab the exact computed BT value
+                # Grab the exact computed BT and ET values
                 bt_val = computed.get(computed_bt_keys.get(evt_type))
+                et_val = computed.get(f"{evt_type}_ET")
                 out.append({
                     "type": evt_type,
                     "time": float(anno[1]),
                     "bt": convert_temp(bt_val),  # <--- Applies the Celsius conversion properly
+                    "et": convert_temp(et_val),  # <--- Same conversion for ET
                 })
     return out  # <--- Moved to the bottom
 
@@ -211,7 +213,7 @@ def parse_alog(file_obj, user=None) -> Roast:
             event_type=e["type"],
             time_s=e["time"],
             bt=e["bt"],
-            et=computed.get(f"{e['type']}_ET"),
+            et=e["et"],
         )
 
     return roast
