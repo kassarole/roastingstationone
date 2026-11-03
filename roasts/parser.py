@@ -46,13 +46,13 @@ def _events_from_data(data, mode):
     out = []
     computed = data.get("computed", {}) or {}
     type_map = {-1: "TP", 0: "CHARGE", 1: "DRY", 2: "FCs", 6: "DROP"}
-    
+
     computed_bt_keys = {
         "CHARGE": "CHARGE_BT",
         "TP": "TP_BT",
         "DRY": "DRY_BT",
         "FCs": "FCs_BT",
-        "DROP": "DROP_BT"
+        "DROP": "DROP_BT",
     }
 
     def convert_temp(t):
@@ -70,9 +70,9 @@ def _events_from_data(data, mode):
                 out.append({
                     "type": evt_type,
                     "time": float(anno[1]),
-                    "bt": convert_temp(bt_val), # <--- Applies the Celsius conversion properly
+                    "bt": convert_temp(bt_val),  # <--- Applies the Celsius conversion properly
                 })
-    return out # <--- Moved to the bottom
+    return out  # <--- Moved to the bottom
 
 
 def parse_alog(file_obj, user=None) -> Roast:
@@ -145,8 +145,9 @@ def parse_alog(file_obj, user=None) -> Roast:
 
     roaster_type = data.get("roastertype") or data.get("machinesetup") or ""
     roaster_org = data.get("organization") or ""
-    operator = data.get("operator") or ""
-    
+    # Operator is now read from the .alog's "title" field (the roaster's name).
+    operator = data.get("title", "").strip()
+
     batch_nr = data.get("roastbatchnr")
     if batch_nr is not None:
         try:
