@@ -1,6 +1,7 @@
 import ast
 import json
 from datetime import date, time
+from django.contrib.auth.models import User
 from .models import Roast, RoastEvent, BeanInfo
 
 
@@ -173,6 +174,13 @@ def parse_alog(file_obj, user=None) -> Roast:
                 origin = o
                 break
 
+    # Auto-claim: if the operator/title matches a registered username, assign ownership.
+    auto_owner = None
+    if operator:
+        auto_owner = User.objects.filter(username__iexact=operator).first()
+    if auto_owner is None and title_str and title_str != operator:
+        auto_owner = User.objects.filter(username__iexact=title_str).first()
+
     # Convert main curves to Celsius
     temp_et_c = _to_celsius(data.get("temp1", []), mode)
     temp_bt_c = _to_celsius(data.get("temp2", []), mode)
@@ -180,7 +188,7 @@ def parse_alog(file_obj, user=None) -> Roast:
     roast = Roast.objects.create(
         alog_uuid=alog_uuid,
         uploaded_by=user,
-        owner=None,
+        owner=auto_owner,
         bean_info=bean_info,
         title=title_str,
         beans=display_name,
