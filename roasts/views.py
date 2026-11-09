@@ -1,6 +1,9 @@
 import json
 import re
 import pprint
+import secrets
+from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Q, Count, Avg, Case, When, F, FloatField
@@ -441,3 +444,125 @@ def download_alog(request, uuid):
 
     response['Content-Disposition'] = f'attachment; filename="{filename}.alog"'
     return response
+
+# --- API views ---
+
+import functools
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+
+
+def api_token_required(view_func):
+    """
+    Simple bearer-token auth for API endpoints.
+
+    Reads token from the `Authorization: Bearer <token>` header (or
+    `X-API-Token` for convenience). Compares against settings.API_TOKEN.
+
+    If settings.API_TOKEN is unset, the endpoint is disabled.
+    """
+    @functools.wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        expected = getattr(settings, "API_TOKEN", None)
+        if not expected:
+            return JsonResponse({"error": "API disabled"}, status=503)
+
+        auth = request.headers.get("Authorization", "")
+        token = ""
+        if auth.startswith("Bearer "):
+            token = auth[len("Bearer "):].strip()
+        if not token:
+            token = request.headers.get("X-API-Token", "").strip()
+
+        if not token or not secrets.compare_digest(token, expected):
+            return JsonResponse({"error": "Unauthorized"}, status=401)
+
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
+
+def _serialize_roast(request, roast):
+    """Compact JSON representation of a roast for API responses."""
+    return {
+        "uuid": str(roast.uuid),
+        "title": roast.title,
+        "beans": roast.beans,
+        "origin": roast.origin,
+        "roast_level": roast.roast_level,
+        "operator": roast.operator,
+        "organization": roast.organization,
+        "roast_date": roast.roast_date.isoformat() if roast.roast_date else None,
+        "roast_time": roast.roast_time.isoformat() if roast.roast_time else None,
+        "weight_in_g": roast.weight_in_g,
+        "weight_out_g": roast.weight_out_g,
+        "is_public": roast.is_public,
+        "owner": roast.owner.username if roast.owner_id else None,
+        "computed": roast.computed,
+        "url": request.build_absolute_uri(roast.get_absolute_url()) if hasattr(roast, "get_absolute_url") else None,
+    }
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@api_token_required
+def api_upload(request):
+    """
+    Upload one or more .alog files via multipart/form-data.
+
+    Accepts files under either the `alog_files` field (matching UploadForm)
+    or the `file` field (single-file convenience). Returns per-file results.
+
+    Optional form field: `is_public` ("1"/"0") — defaults to False.
+    Optional form field: `owner` (username) — only honored for staff tokens
+    via a `?owner=` style override is not supported; instead pass
+    `X-On-Behalf-Of: <username>` header and the token's user must be staff.
+    """
+    files = request.FILES.getlist("alog_files") or request.FILES.getlist("file")
+    if not files:
+        return JsonResponse({"error": "No files provided"}, status=400)
+
+    is_public = request.POST.get("is_public", "0") in ("1", "true", "True", "yes")
+
+    # Optional on-behalf-of for staff automation
+    uploader = request.user if request.user.is_authenticated else None
+    on_behalf = request.headers.get("X-On-Behalf-Of", "").strip()
+    if on_behalf:
+        if not (uploader and uploader.is_staff):
+            return JsonResponse({"error": "X-On-Behalf-Of requires staff"}, status=403)
+        from django.contrib.auth import get_user_model
+        try:
+            uploader = get_user_model().objects.get(username=on_behalf)
+        except get_user_model().DoesNotExist:
+            return JsonResponse({"error": f"Unknown user: {on_behalf}"}, status=400)
+
+    created, failed = [], []
+    for f in files:
+        try:
+            roast = parse_alog(f, user=uploader)
+            if is_public:
+                roast.is_public = True
+                roast.save(update_fields=["is_public"])
+            created.append(_serialize_roast(request, roast))
+        except Exception as e:
+            failed.append({"filename": f.name, "error": str(e)})
+
+    status = 201 if created and not failed else (207 if created else 400)
+    return JsonResponse(
+        {"created": created, "failed": failed, "count": len(created)},
+        status=status,
+    )
+
+
+@require_http_methods(["GET"])
+@api_token_required
+def api_roast_lookup(request, alog_uuid):
+    """Look up a single roast by its Artisan alog UUID.
+
+    Token auth is sufficient — visibility is not filtered, so private
+    roasts are returned to any valid token holder.
+    """
+    roast = Roast.objects.filter(alog_uuid=alog_uuid).first()
+    if roast is None:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    return JsonResponse(_serialize_roast(request, roast))
