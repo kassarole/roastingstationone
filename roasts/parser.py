@@ -140,11 +140,7 @@ def parse_alog(file_obj, user=None) -> Roast:
 
     title_str = data.get("title", "").strip()
     beans_str = data.get("beans", "").strip()
-    generic_titles = ["Roaster Scope", "Untitled", ""]
-    if title_str and title_str not in generic_titles:
-        display_name = title_str
-    else:
-        display_name = beans_str
+    display_name = beans_str
 
     roaster_type = data.get("roastertype") or data.get("machinesetup") or ""
     roaster_org = data.get("organization") or ""
