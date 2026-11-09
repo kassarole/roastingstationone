@@ -32,7 +32,7 @@ curl -X POST https://roast.pumpingstationone.org/api/upload/ \
 ### `GET /api/roasts/<alog_uuid>/`
 Look up a roast by its Artisan alog UUID (32-char hex, e.g.
 `c44b9e1ee7e24cfda0bf2ea7cc2b0265`). Same object shape as `created`
-entries above, plus `alog_uuid`. Returns private roasts too — any
+entries above, plus `alog_uuid`. Returns private roasts too.
 
 ```bash
 curl https://example.com/api/roasts/c44b9e1ee7e24cfda0bf2ea7cc2b0265/ \
