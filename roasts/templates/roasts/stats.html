@@ -23,15 +23,15 @@
   <div>
     <h3>Top Roasters</h3>
     <table class="grid">
-      <thead><tr><th>User</th><th>Roasts</th></tr></thead>
+      <thead><tr><th>Operator</th><th>Roasts</th></tr></thead>
       <tbody>
         {% for u in top_operators %}
           <tr>
             <td>
-              {% if u.operator %}
-                {{ u.operator }}
+              {% if u.op_key %}
+                {{ u.op_key|title }}
               {% else %}
-                <span class="muted">Unowned</span>
+                <span class="muted">Unknown</span>
               {% endif %}
             </td>
             <td>{{ u.n }}</td>
