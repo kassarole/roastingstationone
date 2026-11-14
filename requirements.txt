@@ -6,3 +6,4 @@ python-dotenv==1.0.1
 django-environ==0.11.2
 Pillow==10.3.0
 mozilla-django-oidc==4.0.1
+matplotlib
