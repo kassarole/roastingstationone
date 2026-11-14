@@ -1,7 +1,33 @@
 {% extends "roasts/base.html" %}
 {% load roast_extras %}
 {% load static %}
+
 {% block title %}{{ roast.beans }} - Roasting Station: One{% endblock %}
+
+{% block og %}
+  {# ---- Open Graph (Discord, Slack, iMessage, etc.) ---- #}
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Roasting Station: One">
+  <meta property="og:title" content="{{ og_title }}">
+  <meta property="og:description" content="{{ og_description }}">
+  <meta property="og:url" content="{{ og_url }}">
+  {% if og_image_url %}
+    <meta property="og:image" content="{{ og_image_url }}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="600">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:alt" content="{{ og_title }} roast curve">
+  {% endif %}
+
+  {# ---- Twitter/X card (optional but nice) ---- #}
+  <meta name="twitter:card" content="{% if og_image_url %}summary_large_image{% else %}summary{% endif %}">
+  <meta name="twitter:title" content="{{ og_title }}">
+  <meta name="twitter:description" content="{{ og_description }}">
+  {% if og_image_url %}
+    <meta name="twitter:image" content="{{ og_image_url }}">
+  {% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="detail-header">
   <div>
@@ -91,7 +117,7 @@
       <button type="submit" class="btn-danger">Delete this roast</button>
     </form>
     {% endif %}
-    
+
     <div style="margin-top: 16px;">
         <a href="{% url 'roast_download' roast.uuid %}" class="btn" style="display: inline-block;">Download for Profile</a>
     </div>
@@ -110,13 +136,13 @@
     {% endif %}
 
     <h3>Discussion <span id="comment-count" class="badge">{{ roast.comments.count }}</span></h3>
-    
+
     {% if user.is_authenticated %}
     <div class="comment-composer">
       <div class="avatar">{{ user.username|slice:":1"|upper }}</div>
       <form id="comment-form" data-url="{% url 'roast_comment' roast.uuid %}">
         {% csrf_token %}
-        
+
         <div class="review-toggle">
           <label>
             <input type="radio" name="recommends" value="1" required>

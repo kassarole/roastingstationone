@@ -18,4 +18,5 @@ urlpatterns = [
     path("r/<uuid:uuid>/comment/<int:pk>/delete/", views.delete_comment, name="roast_comment_delete"),
     path("api/upload/", views.api_upload, name="api_upload"),
     path("api/roasts/<str:alog_uuid>/", views.api_roast_lookup, name="api_roast_lookup"),
+    path("roasts/<uuid:uuid>/og.png", views.roast_og_image, name="roast_og_image"),
 ]

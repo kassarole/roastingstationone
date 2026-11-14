@@ -1,17 +1,30 @@
+import io
 import json
 import re
 import pprint
 import secrets
+import functools
+
+import matplotlib
+matplotlib.use("Agg")  # headless backend; must be set before pyplot import
+import matplotlib.pyplot as plt
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Q, Count, Avg, Case, When, F, FloatField
-from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse
+from django.http import (
+    JsonResponse,
+    HttpResponseBadRequest,
+    HttpResponse,
+)
 from django.shortcuts import render, redirect, get_object_or_404
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.core.paginator import Paginator
 from django.template.loader import render_to_string
+from django.urls import reverse
 
 from .models import Roast, RoastComment
 from .parser import parse_alog
@@ -249,6 +262,28 @@ def roast_detail(request, uuid):
     positive_reviews = reviews.filter(recommends=True).count()
     recommend_pct = int((positive_reviews / total_reviews) * 100) if total_reviews > 0 else 0
 
+    # --- Open Graph / Discord embed data ---
+    og_title = roast.beans or roast.title or "Roast"
+    og_description_parts = []
+    if roast.operator:
+        og_description_parts.append(f"by {roast.operator}")
+    if roast.organization:
+        og_description_parts.append(f"@ {roast.organization}")
+    if roast.roast_date:
+        og_description_parts.append(str(roast.roast_date))
+    if roast.roast_level:
+        og_description_parts.append(roast.get_roast_level_display())
+    if roast.origin:
+        og_description_parts.append(f"Origin: {roast.origin}")
+    og_description = " · ".join(og_description_parts) or "Roast profile"
+
+    # Only advertise an image for public roasts (unfurlers are anonymous)
+    og_image_url = None
+    if roast.is_public:
+        og_image_url = request.build_absolute_uri(
+            reverse("roast_og_image", args=[roast.uuid])
+        )
+
     return render(request, "roasts/detail.html", {
         "roast": roast,
         "chart_payload_json": json.dumps(chart_payload),
@@ -263,7 +298,83 @@ def roast_detail(request, uuid):
         "can_claim": roast.can_claim(request.user),
         # NEW: is this roast currently selected for compare?
         "in_compare": str(roast.uuid) in _get_selected_uuids(request),
+        # NEW: Open Graph / Discord embed
+        "og_title": og_title,
+        "og_description": og_description,
+        "og_image_url": og_image_url,
+        "og_url": request.build_absolute_uri(),
     })
+
+
+def roast_og_image(request, uuid):
+    """
+    Render a PNG preview of the roast curve for use as the og:image
+    (Discord, Slack, iMessage, Twitter/X, etc.).
+
+    Unfurlers are anonymous, so we only render the chart for public roasts
+    and return 404 otherwise.
+    """
+    roast = get_object_or_404(Roast, uuid=uuid)
+
+    if not roast.is_public:
+        return HttpResponse(status=404)
+
+    fig, ax = plt.subplots(figsize=(12, 6), dpi=100)
+    fig.patch.set_facecolor("#1e1e1e")
+    ax.set_facecolor("#1e1e1e")
+
+    timex = roast.timex or []
+    bt = roast.temp_bt or []
+    et = roast.temp_et or []
+
+    if timex and bt:
+        ax.plot(timex, bt, color="#ff6b35", linewidth=2.5, label="Bean Temp")
+    if timex and et:
+        ax.plot(timex, et, color="#4ecdc4", linewidth=1.8, alpha=0.85, label="Env Temp")
+
+    # Event markers
+    event_colors = {
+        "CHARGE": "#ffffff",
+        "DRY_END": "#ffd93d",
+        "FC_START": "#a29bfe",
+        "FC_END": "#a29bfe",
+        "SC_START": "#74b9ff",
+        "SC_END": "#74b9ff",
+        "DROP": "#ff4757",
+        "COOL": "#74b9ff",
+    }
+    for e in roast.events.all():
+        if e.time_s is None:
+            continue
+        color = event_colors.get(e.event_type, "#888888")
+        ax.axvline(e.time_s, color=color, linestyle="--", alpha=0.5, linewidth=1)
+
+    # Title block
+    beans = roast.beans or roast.title or "Roast"
+    operator = roast.operator or roast.organization or ""
+    title = beans if not operator else f"{beans}  ·  {operator}"
+    ax.set_title(title, color="#ffffff", fontsize=16, loc="left", pad=12)
+
+    ax.set_xlabel("Time (s)", color="#bbbbbb")
+    ax.set_ylabel("Temp", color="#bbbbbb")
+    ax.tick_params(colors="#888888")
+    for spine in ax.spines.values():
+        spine.set_color("#333333")
+    ax.grid(True, color="#333333", alpha=0.4)
+    if bt or et:
+        ax.legend(
+            facecolor="#2a2a2a",
+            edgecolor="#444444",
+            labelcolor="#dddddd",
+            loc="lower right",
+        )
+
+    buf = io.BytesIO()
+    fig.tight_layout()
+    fig.savefig(buf, format="png", facecolor=fig.get_facecolor())
+    plt.close(fig)
+    buf.seek(0)
+    return HttpResponse(buf.read(), content_type="image/png")
 
 
 @login_required
@@ -445,12 +556,8 @@ def download_alog(request, uuid):
     response['Content-Disposition'] = f'attachment; filename="{filename}.alog"'
     return response
 
+
 # --- API views ---
-
-import functools
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-
 
 def api_token_required(view_func):
     """
