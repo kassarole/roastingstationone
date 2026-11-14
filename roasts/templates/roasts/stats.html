@@ -25,11 +25,11 @@
     <table class="grid">
       <thead><tr><th>User</th><th>Roasts</th></tr></thead>
       <tbody>
-        {% for u in top_owners %}
+        {% for u in top_operators %}
           <tr>
             <td>
-              {% if u.owner__username %}
-                {{ u.owner__username }}
+              {% if u.operator %}
+                {{ u.operator }}
               {% else %}
                 <span class="muted">Unowned</span>
               {% endif %}

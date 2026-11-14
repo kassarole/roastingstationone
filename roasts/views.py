@@ -512,9 +512,10 @@ def stats(request):
         .order_by("-n")[:10]
     )
 
-    # Top owners (group by owner username)
-    top_owners = (
-        qs.values("owner__username")
+    # Top operators (group by the operator name parsed from the .alog)
+    top_operators = (
+        qs.exclude(operator="")
+        .values("operator")
         .annotate(n=Count("id"))
         .order_by("-n")[:10]
     )
@@ -523,7 +524,7 @@ def stats(request):
 
     return render(request, "roasts/stats.html", {
         "top_beans": top_beans,
-        "top_owners": top_owners,
+        "top_operators": top_operators,
         "avg_rating": avg_rating,
         "total_roasts": qs.count(),
     })
