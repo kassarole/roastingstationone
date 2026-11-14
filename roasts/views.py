@@ -515,7 +515,8 @@ def stats(request):
     # Top operators (group by the operator name parsed from the .alog)
     top_operators = (
         qs.exclude(operator="")
-        .values("operator")
+        .annotate(op_key=Lower(Trim("operator")))
+        .values("op_key")
         .annotate(n=Count("id"))
         .order_by("-n")[:10]
     )
