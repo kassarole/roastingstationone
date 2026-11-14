@@ -147,6 +147,10 @@ def parse_alog(file_obj, user=None) -> Roast:
     # Operator is now read from the .alog's "title" field (the roaster's name).
     operator = data.get("title", "").strip()
 
+    # NEW: free-text roasting notes from Artisan
+    roasting_notes = (data.get("roastingnotes") or "").strip()
+    roasting_notes = roasting_notes.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n")
+
     batch_nr = data.get("roastbatchnr")
     if batch_nr is not None:
         try:
@@ -206,6 +210,7 @@ def parse_alog(file_obj, user=None) -> Roast:
         computed=computed,
         flavors=data.get("flavors", []),
         flavor_labels=data.get("flavorlabels", []),
+        notes=roasting_notes,  # NEW
         raw=data,
         is_public=False,
     )
