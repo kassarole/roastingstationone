@@ -14,6 +14,7 @@ from django.core.exceptions import ValidationError
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Q, Count, Avg, Case, When, F, FloatField
+from django.db.models.functions import Lower, Trim
 from django.http import (
     JsonResponse,
     HttpResponseBadRequest,
@@ -25,6 +26,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.paginator import Paginator
 from django.template.loader import render_to_string
 from django.urls import reverse
+
 
 from .models import Roast, RoastComment
 from .parser import parse_alog
