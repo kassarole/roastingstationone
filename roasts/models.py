@@ -15,10 +15,10 @@ ROAST_LEVEL_CHOICES = (
 
 class BeanInfo(models.Model):
     name = models.CharField(max_length=255, db_index=True)
-    origin = models.CharField(max_length=120, blank=True)
-    process = models.CharField(max_length=80, blank=True, help_text="e.g., Washed, Natural, Honey")
-    cultivar = models.CharField(max_length=120, blank=True, help_text="e.g., Bourbon, Caturra, Heirloom")
-    roast_recommendation = models.CharField(max_length=80, blank=True, help_text="e.g., City+ to Full City")
+    origin = models.CharField(max_length=255, blank=True) 
+    process = models.CharField(max_length=255, blank=True, help_text="e.g., Washed, Natural, Honey")
+    cultivar = models.CharField(max_length=255, blank=True, help_text="e.g., Bourbon, Caturra, Heirloom")
+    roast_recommendation = models.CharField(max_length=255, blank=True, help_text="e.g., City+ to Full City")
     flavor_keywords = models.CharField(max_length=255, blank=True, help_text="Brief manual notes (e.g., Citrus, Chocolate, Floral)")
     sweetmarias_url = models.URLField(blank=True, help_text="Link to the Sweet Maria's product page")
     
@@ -59,15 +59,25 @@ class BeanInfo(models.Model):
         help_text="Timestamp of the most recent scrape for this bean.",
     )
 
-    # Note: `updated_at` already exists via auto_now, so we're good.
+    # Add a source field
+    SOURCE_CHOICES = [
+        ("sweetmarias", "Sweet Maria's"),
+        ("thetaridge", "Theta Ridge"),
+        ("manual", "Manual Entry"),
+    ]
+    source = models.CharField(
+        max_length=20, choices=SOURCE_CHOICES, default="manual",
+        help_text="Where this bean record originated.",
+    )
 
     class Meta:
         verbose_name_plural = "Bean Info"
         ordering = ("name",)
         constraints = [
+            # Theta Ridge doesn't have IDs, but if they do, keep them unique per store
             models.UniqueConstraint(
-                fields=["shopify_id"],
-                name="unique_beaninfo_shopify_id",
+                fields=["shopify_id", "source"],
+                name="unique_bean_shopify_id_per_source",
                 condition=models.Q(shopify_id__isnull=False),
             ),
         ]
