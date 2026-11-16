@@ -7,7 +7,8 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://www.sweetmarias.com/collections/green-coffee/products.json"
+# 1. CHANGED: Point to the root products endpoint, not the collection
+BASE_URL = "https://www.sweetmarias.com/products.json"
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; roastlab-scraper/1.0)"}
 
 
@@ -25,7 +26,6 @@ def parse_origin(tags: list[str]) -> str:
     for tag in tags:
         if tag.startswith("Category_Sweet Marias/Green Coffee/"):
             parts = tag.split("/")
-            # We want the deepest path that isn't a generic category
             if len(parts) >= 4 and parts[3] not in (
                 "Latest Additions", "Decaf", "Coffee Sets", "By Type", "Sweet Maria's Blends"
             ):
@@ -38,23 +38,18 @@ def parse_description(text: str) -> dict:
     if not text:
         return {"process": "", "roast_recommendation": "", "flavor_keywords": ""}
 
-    # 1. Process (Washed, Natural, Honey, Dry Process, Wet Hulled)
     process = ""
     for p in ["Dry Process", "Wet Hulled", "Washed", "Natural", "Honey", "Anaerobic", "Decaf"]:
         if p.lower() in text.lower():
             process = p
             break
 
-    # 2. Roast Recommendation (e.g., "City to Full City+", "City+ to Full City")
-    # Matches City/City+/Full City/Full City+/French/Vienna with optional "to" or "-" and a second level
     roast_pattern = r'((?:City|Full City|French|Vienna)(?:\+)?(?:\s*(?:to|-)\s*(?:City|Full City|French|Vienna)(?:\+)?)?)'
     roast_rec = ""
     roast_match = re.search(roast_pattern, text)
     if roast_match:
         roast_rec = roast_match.group(1)
 
-    # 3. Flavor Keywords (usually the first 1-2 sentences)
-    # Grab the first sentence, or up to 150 chars if no period
     flavor = ""
     flavor_match = re.match(r'^([^.]+\.)', text)
     if flavor_match:
@@ -62,20 +57,18 @@ def parse_description(text: str) -> dict:
     else:
         flavor = text[:150].strip() + ("..." if len(text) > 150 else "")
 
-    # Clean up common boilerplate at the start
     for prefix in ["Presents ", "Brings ", "This lot ", "An unique ", "A ", "An "]:
         if flavor.startswith(prefix):
             flavor = flavor[len(prefix):]
             break
             
-    # Capitalize first letter
     if flavor:
         flavor = flavor[0].upper() + flavor[1:]
 
     return {
         "process": process,
         "roast_recommendation": roast_rec,
-        "flavor_keywords": flavor[:255]  # Safe truncation for CharField
+        "flavor_keywords": flavor[:255]
     }
 
 
@@ -96,8 +89,10 @@ def fetch_green_coffee(max_pages: int = 40) -> list[dict]:
             break
 
         for p in products:
-            if p.get("product_type") != "Green Coffee":
+            # 2. CHANGED: Accept both Green Coffee and Archived Coffee
+            if p.get("product_type") not in ("Green Coffee", "Archived Coffee"):
                 continue
+                
             variants = p.get("variants", [])
             if not variants:
                 continue
@@ -107,7 +102,6 @@ def fetch_green_coffee(max_pages: int = 40) -> list[dict]:
             tags = p.get("tags", [])
 
             results.append({
-                # Core identity
                 "shopify_id": p["id"],
                 "shopify_handle": p["handle"],
                 "name": p["title"],
@@ -118,8 +112,6 @@ def fetch_green_coffee(max_pages: int = 40) -> list[dict]:
                 "description": desc_text,
                 "tags": tags,
                 "variant_prices": {v["title"]: v["price"] for v in variants},
-                
-                # Parsed fields
                 "origin": parse_origin(tags),
                 "process": parsed_desc["process"],
                 "roast_recommendation": parsed_desc["roast_recommendation"],

@@ -70,12 +70,18 @@ class Command(BaseCommand):
                 updated += 1
 
         if not dry_run:
-            # Mark scraped-but-now-missing beans as unavailable.
+            # Mark items as unavailable if they exist in our DB with a shopify_id
+            # but were completely absent from this full catalog scrape.
+            # (They were probably deleted entirely from Shopify).
             BeanInfo.objects.filter(
                 shopify_id__isnull=False
             ).exclude(
                 shopify_id__in=seen_ids
             ).update(available=False)
+
+            # Since we are now scraping "Archived Coffee", the `available` 
+            # boolean is populated correctly from the variant data.
+            # Archived coffees will automatically be saved as available=False.
 
             self.stdout.write(self.style.SUCCESS(
                 f"Created {created}, updated {updated}."
