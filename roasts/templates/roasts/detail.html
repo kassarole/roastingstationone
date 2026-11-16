@@ -36,14 +36,32 @@
       {% if roast.bean_info %}
       <div class="bean-info-card" style="background: #f0f9ff; padding: 12px; border-radius: 6px; margin-bottom: 16px; border: 1px solid var(--ps1-cyan);">
         <h3 style="margin-top: 0; color: var(--ps1-cyan);">Bean Library Match</h3>
-        <p style="margin: 4px 0;"><strong>Name:</strong> {{ roast.bean_info.name }}</p>
+        
+        <p style="margin: 4px 0;">
+            <strong>Name:</strong> {{ roast.bean_info.name }} 
+            <span class="badge" style="background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-left: 6px;">
+                {{ roast.bean_info.get_source_display }}
+            </span>
+        </p>
+        
         <p style="margin: 4px 0;"><strong>Process:</strong> {{ roast.bean_info.process|default:"-" }} | <strong>Cultivar:</strong> {{ roast.bean_info.cultivar|default:"-" }}</p>
         <p style="margin: 4px 0;"><strong>Recommended Roast:</strong> {{ roast.bean_info.roast_recommendation|default:"-" }}</p>
+        
         {% if roast.bean_info.flavor_keywords %}
         <p style="margin: 4px 0;"><strong>Flavors:</strong> {{ roast.bean_info.flavor_keywords }}</p>
         {% endif %}
+        
+        {# Dynamically link based on source #}
         {% if roast.bean_info.sweetmarias_url %}
-        <p style="margin: 8px 0 0;"><a href="{{ roast.bean_info.sweetmarias_url }}" target="_blank" style="color: var(--ps1-red); font-weight: bold;">View on Sweet Maria's &rarr;</a></p>
+        <p style="margin: 8px 0 0;">
+            {% if roast.bean_info.source == "sweetmarias" %}
+                <a href="{{ roast.bean_info.sweetmarias_url }}" target="_blank" style="color: var(--ps1-red); font-weight: bold;">View on Sweet Maria's &rarr;</a>
+            {% elif roast.bean_info.source == "thetaridge" %}
+                <a href="{{ roast.bean_info.sweetmarias_url }}" target="_blank" style="color: var(--ps1-red); font-weight: bold;">View on Theta Ridge &rarr;</a>
+            {% else %}
+                <a href="{{ roast.bean_info.sweetmarias_url }}" target="_blank" style="color: var(--ps1-red); font-weight: bold;">View Product Page &rarr;</a>
+            {% endif %}
+        </p>
         {% endif %}
       </div>
       {% endif %}
