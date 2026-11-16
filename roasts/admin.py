@@ -16,9 +16,35 @@ class CommentInline(admin.TabularInline):
 
 @admin.register(BeanInfo)
 class BeanInfoAdmin(admin.ModelAdmin):
-    list_display = ("name", "origin", "process", "cultivar", "roast_recommendation")
-    list_filter = ("origin", "process")
-    search_fields = ("name", "origin", "cultivar")
+    list_display = (
+        "name", "origin", "process", "price", "available",
+        "last_scraped", "sweetmarias_url",
+    )
+    list_filter = ("available", "origin", "process")
+    search_fields = ("name", "origin", "cultivar", "shopify_handle")
+    readonly_fields = (
+        "shopify_id", "shopify_handle", "body_html", "description",
+        "tags", "variant_prices", "last_scraped",
+    )
+    fieldsets = (
+        (None, {
+            "fields": (
+                "name", "origin", "process", "cultivar",
+                "roast_recommendation", "flavor_keywords",
+            ),
+        }),
+        ("Sweet Maria's", {
+            "fields": (
+                "shopify_id", "shopify_handle", "sweetmarias_url",
+                "price", "available", "variant_prices",
+                "last_scraped",
+            ),
+        }),
+        ("Scraped content (read-only)", {
+            "classes": ("collapse",),
+            "fields": ("description", "tags", "body_html"),
+        }),
+    )
 
 
 @admin.register(Roast)
@@ -42,3 +68,4 @@ class RoastCommentAdmin(admin.ModelAdmin):
     list_display = ("author", "roast", "recommends", "created_at")
     list_filter = ("recommends",)
     search_fields = ("author__username", "body")
+

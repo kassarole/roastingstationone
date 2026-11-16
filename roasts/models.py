@@ -25,9 +25,52 @@ class BeanInfo(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+        # --- Scraper identity ---
+    shopify_id = models.BigIntegerField(
+        null=True, blank=True, unique=True, db_index=True,
+        help_text="Shopify product ID from Sweet Maria's; used to dedupe scrapes.",
+    )
+    shopify_handle = models.SlugField(
+        max_length=255, null=True, blank=True, unique=True, db_index=True,
+        help_text="Shopify product handle (URL slug).",
+    )
+
+    # --- Scraped enrichment ---
+    price = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True,
+        help_text="Current 1 lb price from Sweet Maria's.",
+    )
+    available = models.BooleanField(
+        default=True,
+        help_text="False if the product is sold out or archived.",
+    )
+    body_html = models.TextField(blank=True)
+    description = models.TextField(
+        blank=True,
+        help_text="Tag-stripped text from the product body_html.",
+    )
+    tags = models.JSONField(default=list, blank=True)
+    variant_prices = models.JSONField(
+        default=dict, blank=True,
+        help_text='Size → price map, e.g. {"1 LB": "8.85", "2 LB": "17.40"}.',
+    )
+    last_scraped = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Timestamp of the most recent scrape for this bean.",
+    )
+
+    # Note: `updated_at` already exists via auto_now, so we're good.
+
     class Meta:
         verbose_name_plural = "Bean Info"
         ordering = ("name",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["shopify_id"],
+                name="unique_beaninfo_shopify_id",
+                condition=models.Q(shopify_id__isnull=False),
+            ),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.origin})"
@@ -186,3 +229,4 @@ class RoastComment(models.Model):
 
     def __str__(self):
         return f"{self.author.username}: {self.body[:40]}"
+
