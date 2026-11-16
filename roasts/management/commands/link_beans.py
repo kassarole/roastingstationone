@@ -3,21 +3,33 @@ from roasts.models import Roast, BeanInfo
 
 
 def _match_bean_info(display_name, beans_str):
-    """Same matching logic used in parser.py."""
+    """Same matching logic used in parser.py, but sorted for specificity."""
     if not display_name:
         return None
-    # Exact match
+        
+    # 1. Exact match
     match = BeanInfo.objects.filter(name__iexact=display_name).first()
     if match:
         return match
-    # Partial match — only if the bean name is unique
+        
+    # 2. Partial match — only if the bean name is unique
     candidates = BeanInfo.objects.filter(name__icontains=display_name)
     if candidates.count() == 1:
         return candidates.first()
-    # Reverse partial: bean name contains a BeanInfo name
-    for bi in BeanInfo.objects.all():
+        
+    # 3. Reverse partial: bean name contains a BeanInfo name.
+    # We MUST sort by length descending so "El Salvador Esperanza Bourbon" 
+    # is checked before "El Salvador".
+    all_beans = sorted(
+        BeanInfo.objects.all(), 
+        key=lambda b: len(b.name), 
+        reverse=True
+    )
+    
+    for bi in all_beans:
         if bi.name and bi.name.lower() in display_name.lower():
             return bi
+            
     return None
 
 
