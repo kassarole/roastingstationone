@@ -6,7 +6,6 @@ urlpatterns = [
     path("upload/", views.upload, name="roast_upload"),
     path("compare/", views.compare, name="roast_compare"),
     path("stats/", views.stats, name="roast_stats"),
-    # NEW: session-backed selection endpoints
     path("selection/<uuid:uuid>/toggle/", views.toggle_selection, name="roast_toggle_selection"),
     path("selection/clear/", views.clear_selection, name="roast_clear_selection"),
     path("r/<uuid:uuid>/", views.roast_detail, name="roast_detail"),
@@ -19,4 +18,7 @@ urlpatterns = [
     path("api/upload/", views.api_upload, name="api_upload"),
     path("api/roasts/<str:alog_uuid>/", views.api_roast_lookup, name="api_roast_lookup"),
     path("roasts/<uuid:uuid>/og.png", views.roast_og_image, name="roast_og_image"),
+    # Operator Directory
+    path("roasters/", views.roaster_list, name="roaster_list"),
+    path("roaster/<str:name>/", views.roaster_profile, name="profile"),
 ]

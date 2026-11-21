@@ -17,6 +17,7 @@
       <a href="{% url 'roast_list' %}">Roasts</a>
       {% if user.is_authenticated %}
         <a href="{% url 'roast_stats' %}">Stats</a>
+        <a href="{% url 'roaster_list' %}">Roasters</a>
         <a href="{% url 'roast_upload' %}">Upload</a>
         <span class="who">{{ user.username }}</span>
         <form method="post" action="{% url 'logout' %}" class="logout-form">

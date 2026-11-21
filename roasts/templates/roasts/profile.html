@@ -1,0 +1,64 @@
+{% extends "roasts/base.html" %}
+{% load roast_extras %}
+
+{% block title %}{{ profile_user.display_name }} - Roaster Profile{% endblock %}
+
+{% block content %}
+<div class="detail-header" style="margin-bottom: 24px;">
+  <div>
+    <h1>{{ profile_user.display_name }}</h1>
+    <p class="meta">Roaster Profile</p>
+  </div>
+</div>
+
+<section class="stats-row" style="margin-bottom: 32px;">
+  <div><label>Total Roasts</label><span>{{ stats.total_roasts|default:"0" }}</span></div>
+  <div><label>Total Green Used</label><span>{% if stats.total_weight %}{{ stats.total_weight|floatformat:0 }} g{% else %}-{% endif %}</span></div>
+  <div><label>Avg Rating</label><span>{% if stats.avg_rating %}{{ stats.avg_rating|floatformat:1 }} / 5{% else %}-{% endif %}</span></div>
+  <div><label>Reviews on Their Roasts</label><span>{{ stats.reviews_on_roasts|default:"0" }}</span></div>
+</section>
+
+{% if top_bean %}
+<div class="bean-info-card" style="background: #f0f9ff; padding: 12px; border-radius: 6px; margin-bottom: 24px; border: 1px solid var(--ps1-cyan);">
+  <p style="margin: 0;"><strong>Most Roasted Bean:</strong> {{ top_bean.beans }} ({{ top_bean.n }} roasts)</p>
+</div>
+{% endif %}
+
+<h3>Roasts</h3>
+{% if page.object_list %}
+  <div class="roast-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;">
+    {% for roast in page %}
+      <div class="card" style="padding: 16px; border: 1px solid #444; border-radius: 8px; background: var(--ps1-dark);">
+        <h4 style="margin-top: 0; margin-bottom: 8px;">
+          <a href="{{ roast.get_absolute_url }}" style="color: var(--ps1-cyan); text-decoration: none;">{{ roast.beans|default:"(untitled roast)" }}</a>
+        </h4>
+        <p style="margin: 4px 0; font-size: 0.9em; color: #aaa;">
+          {{ roast.roast_date|default:"No date" }} | {{ roast.get_roast_level_display|default:"-" }}
+        </p>
+        <p style="margin: 4px 0; font-size: 0.9em;">
+          {% if roast.rating %}
+            <span class="stars">{% for i in "12345"|slice:roast.rating %}*{% endfor %}</span>
+          {% else %}
+            <span style="color: #666;">No rating</span>
+          {% endif %}
+        </p>
+        {% if not roast.is_public %}
+          <span class="badge" style="background: #444; padding: 2px 6px; border-radius: 4px; font-size: 0.75em;">Private</span>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="pagination" style="margin-top: 24px; display: flex; gap: 8px; justify-content: center;">
+    {% if page.has_previous %}
+      <a href="?page={{ page.previous_page_number }}" class="btn">&laquo; Prev</a>
+    {% endif %}
+    <span style="padding: 8px;">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}
+      <a href="?page={{ page.next_page_number }}" class="btn">Next &raquo;</a>
+    {% endif %}
+  </div>
+{% else %}
+  <p class="empty">No public roasts found.</p>
+{% endif %}
+{% endblock %}

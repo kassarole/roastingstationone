@@ -4,6 +4,7 @@ import re
 import pprint
 import secrets
 import functools
+from urllib.parse import quote
 
 import matplotlib
 matplotlib.use("Agg")  # headless backend; must be set before pyplot import
@@ -12,13 +13,15 @@ import matplotlib.pyplot as plt
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.contrib import messages
-from django.db.models import Q, Count, Avg, Case, When, F, FloatField
+from django.db.models import Q, Count, Avg, Sum, Max, Case, When, F, FloatField
 from django.db.models.functions import Lower, Trim
 from django.http import (
     JsonResponse,
     HttpResponseBadRequest,
     HttpResponse,
+    Http404,
 )
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST, require_http_methods
@@ -26,6 +29,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.paginator import Paginator
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils import timezone
 
 
 from .models import Roast, RoastComment
@@ -172,7 +176,6 @@ def roast_list(request):
         "ror_min": ror_min or "",
         "total": qs.count(),
         "current_sort": sort_by,
-        # NEW: for cross-page checkbox state
         "selected_uuids": selected_uuids,
         "selected_count": len(selected_uuids),
         "max_compare": MAX_COMPARE,
@@ -181,7 +184,6 @@ def roast_list(request):
 
 @require_POST
 def toggle_selection(request, uuid):
-    """Toggle a single roast UUID in the session-backed compare selection."""
     roast = get_object_or_404(Roast, uuid=uuid)
     if not roast.can_view(request.user):
         return JsonResponse({"error": "Not permitted"}, status=403)
@@ -209,7 +211,6 @@ def toggle_selection(request, uuid):
 
 @require_POST
 def clear_selection(request):
-    """Clear all compare selections."""
     request.session[SELECTION_SESSION_KEY] = []
     request.session.modified = True
     return JsonResponse({"count": 0})
@@ -258,13 +259,11 @@ def roast_detail(request, uuid):
 
     comments = roast.comments.select_related("author").filter(parent=None)
 
-    # Review summary calculation
     reviews = roast.comments.exclude(recommends__isnull=True)
     total_reviews = reviews.count()
     positive_reviews = reviews.filter(recommends=True).count()
     recommend_pct = int((positive_reviews / total_reviews) * 100) if total_reviews > 0 else 0
 
-    # --- Open Graph / Discord embed data ---
     og_title = roast.beans or roast.title or "Roast"
     og_description_parts = []
     if roast.operator:
@@ -279,7 +278,6 @@ def roast_detail(request, uuid):
         og_description_parts.append(f"Origin: {roast.origin}")
     og_description = " · ".join(og_description_parts) or "Roast profile"
 
-    # Only advertise an image for public roasts (unfurlers are anonymous)
     og_image_url = None
     if roast.is_public:
         og_image_url = request.build_absolute_uri(
@@ -298,9 +296,7 @@ def roast_detail(request, uuid):
         "can_edit": roast.can_edit(request.user),
         "can_delete": roast.can_delete(request.user),
         "can_claim": roast.can_claim(request.user),
-        # NEW: is this roast currently selected for compare?
         "in_compare": str(roast.uuid) in _get_selected_uuids(request),
-        # NEW: Open Graph / Discord embed
         "og_title": og_title,
         "og_description": og_description,
         "og_image_url": og_image_url,
@@ -309,13 +305,6 @@ def roast_detail(request, uuid):
 
 
 def roast_og_image(request, uuid):
-    """
-    Render a PNG preview of the roast curve for use as the og:image
-    (Discord, Slack, iMessage, Twitter/X, etc.).
-
-    Unfurlers are anonymous, so we only render the chart for public roasts
-    and return 404 otherwise.
-    """
     roast = get_object_or_404(Roast, uuid=uuid)
 
     if not roast.is_public:
@@ -334,7 +323,6 @@ def roast_og_image(request, uuid):
     if timex and et:
         ax.plot(timex, et, color="#4ecdc4", linewidth=1.8, alpha=0.85, label="Env Temp")
 
-    # Event markers
     event_colors = {
         "CHARGE": "#ffffff",
         "DRY_END": "#ffd93d",
@@ -351,7 +339,6 @@ def roast_og_image(request, uuid):
         color = event_colors.get(e.event_type, "#888888")
         ax.axvline(e.time_s, color=color, linestyle="--", alpha=0.5, linewidth=1)
 
-    # Title block
     beans = roast.beans or roast.title or "Roast"
     operator = roast.operator or roast.organization or ""
     title = beans if not operator else f"{beans}  ·  {operator}"
@@ -464,21 +451,16 @@ def delete_comment(request, uuid, pk):
 
 @login_required
 def compare(request):
-    """Compare view: uses GET ?u=... if provided (shareable links),
-    otherwise falls back to the session-backed selection."""
     uuids = request.GET.getlist("u")
 
     if not uuids:
-        # Fall back to session selection for cross-page comparisons
         uuids = _get_selected_uuids(request)
 
     if not uuids:
-        # Nothing to compare; send them back
         return redirect("roast_list")
 
     qs = _visible_roasts(request.user).filter(uuid__in=uuids)
 
-    # Preserve the order of selection
     roast_dict = {str(r.uuid): r for r in qs}
     roasts = [roast_dict[u] for u in uuids if u in roast_dict][:MAX_COMPARE]
 
@@ -506,7 +488,6 @@ def compare(request):
 def stats(request):
     qs = _visible_roasts(request.user)
 
-    # Top beans
     top_beans = (
         qs.exclude(beans="")
         .values("beans")
@@ -514,7 +495,6 @@ def stats(request):
         .order_by("-n")[:10]
     )
 
-    # Top operators (group by the operator name parsed from the .alog)
     top_operators = (
         qs.exclude(operator="")
         .annotate(op_key=Lower(Trim("operator")))
@@ -539,17 +519,14 @@ def download_alog(request, uuid):
     if not roast.can_view(request.user):
         return HttpResponseBadRequest("Not permitted")
 
-    # Make a copy so we don't accidentally save these changes to the database
     raw_data = dict(roast.raw)
 
-    # Update the raw data with any edits made in the web app
     raw_data['title'] = roast.title
     raw_data['beans'] = roast.beans
     raw_data['roastertype'] = roast.roaster_type
     raw_data['operator'] = roast.operator
     raw_data['organization'] = roast.organization
 
-    # Format it exactly like an Artisan .alog file (Python dict literal)
     alog_content = pprint.pformat(raw_data, indent=1, width=120)
 
     response = HttpResponse(alog_content, content_type="text/plain")
@@ -564,14 +541,6 @@ def download_alog(request, uuid):
 # --- API views ---
 
 def api_token_required(view_func):
-    """
-    Simple bearer-token auth for API endpoints.
-
-    Reads token from the `Authorization: Bearer <token>` header (or
-    `X-API-Token` for convenience). Compares against settings.API_TOKEN.
-
-    If settings.API_TOKEN is unset, the endpoint is disabled.
-    """
     @functools.wraps(view_func)
     def _wrapped(request, *args, **kwargs):
         expected = getattr(settings, "API_TOKEN", None)
@@ -593,7 +562,6 @@ def api_token_required(view_func):
 
 
 def _serialize_roast(request, roast):
-    """Compact JSON representation of a roast for API responses."""
     return {
         "uuid": str(roast.uuid),
         "title": roast.title,
@@ -617,24 +585,12 @@ def _serialize_roast(request, roast):
 @require_http_methods(["POST"])
 @api_token_required
 def api_upload(request):
-    """
-    Upload one or more .alog files via multipart/form-data.
-
-    Accepts files under either the `alog_files` field (matching UploadForm)
-    or the `file` field (single-file convenience). Returns per-file results.
-
-    Optional form field: `is_public` ("1"/"0") — defaults to False.
-    Optional form field: `owner` (username) — only honored for staff tokens
-    via a `?owner=` style override is not supported; instead pass
-    `X-On-Behalf-Of: <username>` header and the token's user must be staff.
-    """
     files = request.FILES.getlist("alog_files") or request.FILES.getlist("file")
     if not files:
         return JsonResponse({"error": "No files provided"}, status=400)
 
     is_public = request.POST.get("is_public", "0") in ("1", "true", "True", "yes")
 
-    # Optional on-behalf-of for staff automation
     uploader = request.user if request.user.is_authenticated else None
     on_behalf = request.headers.get("X-On-Behalf-Of", "").strip()
     if on_behalf:
@@ -667,13 +623,87 @@ def api_upload(request):
 @require_http_methods(["GET"])
 @api_token_required
 def api_roast_lookup(request, alog_uuid):
-    """Look up a single roast by its Artisan alog UUID.
-
-    Token auth is sufficient — visibility is not filtered, so private
-    roasts are returned to any valid token holder.
-    """
     roast = Roast.objects.filter(alog_uuid=alog_uuid).first()
     if roast is None:
         return JsonResponse({"error": "Not found"}, status=404)
-
     return JsonResponse(_serialize_roast(request, roast))
+
+
+# --- Operator-based Directory & Profiles ---
+
+@login_required
+def roaster_list(request):
+    # Group roasts by operator (case-insensitive, trimmed)
+    roasters = (
+        Roast.objects
+        .exclude(operator="")
+        .annotate(op_clean=Lower(Trim("operator")))
+        .values("op_clean")
+        .annotate(
+            roast_count=Count("id"),
+            last_roast=Max("roast_date"),
+        )
+        .order_by("-roast_count", "op_clean")
+    )
+
+    paginator = Paginator(roasters, 50)
+    page = paginator.get_page(request.GET.get("page"))
+
+    # Add a display name (preserve original casing of the most recent roast's operator)
+    for r in page:
+        latest = (
+            Roast.objects
+            .filter(operator__iexact=r["op_clean"])
+            .order_by("-roast_date")
+            .values_list("operator", flat=True)
+            .first()
+        )
+        r["display_name"] = latest or r["op_clean"].title()
+        r["url_name"] = quote(r["display_name"])
+
+    return render(request, "roasts/roaster_list.html", {"page": page})
+
+
+@login_required
+def roaster_profile(request, name):
+    roasts_qs = Roast.objects.filter(operator__iexact=name)
+
+    if not roasts_qs.exists():
+        raise Http404("No roaster found with that name")
+
+    display_name = (
+        roasts_qs.order_by("-roast_date").values_list("operator", flat=True).first()
+    ) or name
+
+    stats = roasts_qs.aggregate(
+        total_roasts=Count("id"),
+        total_weight=Sum("weight_in_g"),
+        avg_rating=Avg("rating"),
+    )
+
+    stats["reviews_on_roasts"] = RoastComment.objects.filter(
+        roast__in=roasts_qs,
+        recommends__isnull=False,
+    ).count()
+
+    top_bean = (
+        roasts_qs.exclude(beans="")
+        .values("beans")
+        .annotate(n=Count("id"))
+        .order_by("-n")
+        .first()
+    )
+
+    paginator = Paginator(roasts_qs.order_by("-roast_date", "-roast_time"), 20)
+    page = paginator.get_page(request.GET.get("page"))
+
+    return render(request, "roasts/profile.html", {
+        "profile_user": {
+            "username": display_name,
+            "display_name": display_name,
+        },
+        "page": page,
+        "stats": stats,
+        "top_bean": top_bean,
+        "is_own_profile": False, # No longer tracking this against a user
+    })
